@@ -1,0 +1,19 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <TargetFrameworks>netstandard2.1;net5.0</TargetFrameworks>
+    <PackageId>Discord.Addons.Hosting</PackageId>
+    <Version>4.0.2</Version>
+    <PackageRequireLicenseAcceptance>true</PackageRequireLicenseAcceptance>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <PackageTags>discord,discord.net,addon,hosting,microsoft.extensions.hosting</PackageTags>
+    <DebugType>embedded</DebugType>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Discord.Net.Labs.Commands" Version="2.3.5" />
+    <PackageReference Include="Discord.Net.Labs.WebSocket" Version="2.4.9" />
+    <PackageReference Include="Microsoft.Extensions.Hosting" Version="5.0.0" />
+  </ItemGroup>
+
+</Project>

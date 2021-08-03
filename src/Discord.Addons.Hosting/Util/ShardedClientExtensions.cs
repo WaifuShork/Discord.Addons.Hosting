@@ -12,6 +12,8 @@ namespace Discord.Addons.Hosting.Util
     /// </summary>
     public static class ShardedClientExtensions
     {
+        private static TaskCompletionSource<object>? _shardedTcs;
+        
         /// <summary>
         /// Asynchronously waits for all shards to report ready.
         /// </summary>
@@ -21,38 +23,46 @@ namespace Discord.Addons.Hosting.Util
         public static Task WaitForReadyAsync(this DiscordShardedClient client, CancellationToken cancellationToken)
         {
             if (_shardedTcs is null)
+            {
                 throw new InvalidOperationException("The sharded client has not been registered correctly. Did you use ConfigureDiscordShardedHost on your HostBuilder?");
+            }
 
             if (_shardedTcs.Task.IsCompleted)
+            {
                 return _shardedTcs.Task;
+            }
 
-            var registration = cancellationToken.Register(
-                state => { ((TaskCompletionSource<object>)state!).TrySetResult(null!); },
+            var registration = cancellationToken.Register(state =>
+                {
+                    ((TaskCompletionSource<object>) state).TrySetResult(null!);
+                },
                 _shardedTcs);
 
-            return _shardedTcs.Task.ContinueWith(_ => registration.DisposeAsync());
+            return _shardedTcs.Task.ContinueWith(_ => registration.DisposeAsync(), cancellationToken);
         }
 
-        private static TaskCompletionSource<object>? _shardedTcs;
 
         internal static void RegisterShardedClientReady(this DiscordShardedClient client)
         {
             _shardedTcs = new TaskCompletionSource<object>(TaskCreationOptions.RunContinuationsAsynchronously);
             var shardReadyCount = 0;
 
-            client.ShardReady += ShardReady;
+            client.ShardReady += ShardReadyAsync;
 
-            Task ShardReady(DiscordSocketClient _)
+            Task ShardReadyAsync(DiscordSocketClient _)
             {
                 shardReadyCount++;
                 if (shardReadyCount == client.Shards.Count)
                 {
-                    _shardedTcs!.TrySetResult(null!);
-                    client.ShardReady -= ShardReady;
+                    if (_shardedTcs != null)
+                    {
+                        _shardedTcs.TrySetResult(null!);
+                    }
+                    
+                    client.ShardReady -= ShardReadyAsync;
                 }
                 return Task.CompletedTask;
             }
-
         }
     }
 }

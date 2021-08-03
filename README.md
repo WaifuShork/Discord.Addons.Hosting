@@ -1,154 +1,17 @@
-# Discord.Addons.Hosting 
-![.NET Core Build](https://github.com/Hawxy/Discord.Addons.Hosting/workflows/.NET%20Core%20Build/badge.svg)
-[![NuGet](https://img.shields.io/nuget/v/Discord.Addons.Hosting.svg?style=flat-square)](https://www.nuget.org/packages/Discord.Addons.Hosting)
-![Nuget](https://img.shields.io/nuget/dt/Discord.Addons.Hosting?style=flat-square)
+# Discord.Addons.Hosting
 
-[Discord.Net](https://github.com/RogueException/Discord.Net) hosting with [Microsoft.Extensions.Hosting](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/host/generic-host). 
+## Summary? 
+
+This is a fork for the experimental Discord library that's a fork of [Discord.NET](https://github.com/discord-net/Discord.Net). 
+This exists for the sole purpose of making my life easier so I can continue using this library with the latest versions of the Discord API, 
+as it seems the developers have pretty much given up unfortunately.
+
+[Discord.Net-Labs](https://github.com/Discord-Net-Labs/Discord.Net-Labs) hosting with [Microsoft.Extensions.Hosting](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/host/generic-host). 
 This package provides extensions to a .NET Generic Host (`IHostBuilder`) that will run a Discord.Net socket/sharded client as a controllable `IHostedService`. This simplifies initial bot creation and moves the usual boilerplate to a convenient builder pattern.
 
-Discord.Net 2.4.0+ & .NET Core 3.1+ is required.
+## Addendum
+I will NOT be providing any documentation for this fork as it is not meant for public use. If you wish to learn how to use this library
+please look [here](https://github.com/Hawxy/Discord.Addons.Hosting). I've simply forked the repository and made it public in the name of open-source.
 
-```csharp
-// CreateDefaultBuilder configures a lot of stuff for us automatically
-// See: https://docs.microsoft.com/en-us/aspnet/core/fundamentals/host/generic-host
-var hostBuilder = Host.CreateDefaultBuilder()   
-    .ConfigureDiscordHost((context, config) =>
-    {
-        config.SocketConfig = new DiscordSocketConfig
-        {
-            LogLevel = LogSeverity.Verbose,
-            AlwaysDownloadUsers = true,
-            MessageCacheSize = 200
-        };
-
-        config.Token = context.Configuration["token"];
-    })
-    .UseCommandService((context, config) =>
-    {
-        config.DefaultRunMode = RunMode.Async;
-        config.CaseSensitiveCommands = false;
-    })
-    .ConfigureServices((context, services) =>
-    {
-        //Add any other services here
-        services.AddHostedService<CommandHandler>();
-        services.AddHostedService<BotStatusService>();
-        services.AddHostedService<LongRunningService>();
-    });
-  
-await hostBuilder.RunConsoleAsync();
-```
-
-## Getting Started
-
-1. Create a [.NET 5 Worker Service](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/host/hosted-services?view=aspnetcore-5.0&tabs=visual-studio#worker-service-template) using Visual Studio or via the dotnet cli (`dotnet new worker -o MyWorkerService`)
-2. Add ```Discord.Addons.Hosting``` to your project.   
-3. Set your bot token via the [dotnet secrets manager](https://docs.microsoft.com/en-us/aspnet/core/security/app-secrets?view=aspnetcore-5.0&tabs=windows#set-a-secret): `dotnet user-secrets set "token" "your-token-here"`
-4. Add your bot prefix to `appsettings.json`
-5. Configure your Discord client with `ConfigureDiscordHost`.
-6. Create and start your application using a HostBuilder as shown above and in the examples linked below.
-
-## Examples
-
-Fully working examples are available [here](https://github.com/Hawxy/Discord.Addons.Hosting/tree/master/Samples)
-
-## Sharded Client
-
-To use the sharded client instead of the socket client, simply replace `ConfigureDiscordHost` with `ConfigureDiscordShardedHost`:
-```csharp
-.ConfigureDiscordShardedHost((context, config) =>
-{
-    config.SocketConfig = new DiscordSocketConfig
-    {
-    	// Manually set the required shards, or leave empty for the recommended count
-	TotalShards = 4
-    };
-
-    config.Token = context.Configuration["token"];
-})
-
-```
-
-## Serilog
-
-Microsoft's default logging has an unfortunate default output format, so I highly recommend using Serilog instead of the standard Microsoft logging. 
-
-Serilog should be added to the host with ```Serilog.Extensions.Hosting```. 
-
-See the Serilog [example](https://github.com/Hawxy/Discord.Addons.Hosting/tree/master/Samples/SampleBotSerilog) for usage.
-
-## Discord Client Services
-
-This section assumes some prior knowledge of Dependency Injection within the .NET ecosystem. Take a read of [this](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/dependency-injection) if you have no idea what any of this means.
-
-During bot development, it's highly like you'll require the ability to execute code immediately after startup, such as setting the bot's status, reaching out to a web server, registering an event, or kicking off the continuous execution of code in the background. Given we're using the generic host and have its `IHostedService` & `BackgroundService` capabilities in our toolbelt, this is easily achievable in a clean and concise way. 
-
-This package ships with the `DiscordClientService` and `DiscordShardedClientService` base classes for the socket client and sharded client respectively. For convenience, both of them expose the `Client` and `Logger`. Simply inherit from the given type, implement the required constructor, place your execution requirements within `ExecuteAsync` and register the service with your service collection via `services.AddHostedService`.
-
-```csharp
-public class CommandHandler : DiscordClientService
-{
-    private readonly IServiceProvider _provider;
-    private readonly CommandService _commandService;
-    private readonly IConfiguration _config;
-
-    public CommandHandler(DiscordSocketClient client, ILogger<CommandHandler> logger,  IServiceProvider provider, CommandService commandService, IConfiguration config) : base(client, logger)
-    {
-        _provider = provider;
-        _commandService = commandService;
-        _config = config;
-    }
-    // This'll be executed during startup.
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-        Client.MessageReceived += HandleMessage;
-        _commandService.CommandExecuted += CommandExecutedAsync;
-        await _commandService.AddModulesAsync(Assembly.GetEntryAssembly(), _provider);
-    }
-        
-    //.....
-}
-```
-```csharp
- .ConfigureServices((context, services) =>
-{
-    services.AddHostedService<CommandHandler>();
-    //....
-});
-
-```
- 
- The `WaitForReadyAsync` extension method is also available for both client types to await execution of your service until the client has reached a Ready state:
- 
- ```csharp
-public class BotStatusService : DiscordClientService
-{
-    public BotStatusService(DiscordSocketClient client, ILogger<DiscordClientService> logger) : base(client, logger)
-    {
-    }
-
-    protected override async Task ExecuteAsync(CancellationToken stoppingToken)
-    {
-    	// Wait for the client to be ready before setting the status
-        await Client.WaitForReadyAsync(stoppingToken);
-        Logger.LogInformation("Client is ready!");
-
-        await Client.SetActivityAsync(new Game("Set my status!"));
-    }
-}
-```
-
-#### Additional notes: 
-- Services that do not require access to the Discord Client should use an implementation of [BackgroundService](https://docs.microsoft.com/en-us/dotnet/architecture/microservices/multi-container-microservice-net-applications/background-tasks-with-ihostedservice) if the Discord client is not required.
-
-- Services with complex startup & shutdown activities should implement `IHostedService` directly.
-
-### Shutdown
-
-When shutdown is requested, the host will wait a maximum of 5 seconds for services to stop before timing out.
-
-If you're finding that this isn't enough time, you can modify the shutdown timeout via the [ShutdownTimeout host setting](https://docs.microsoft.com/en-us/aspnet/core/fundamentals/host/generic-host?view=aspnetcore-5.0#shutdowntimeout).
-
-### IOptions
-
-This package uses `Microsoft.Extensions.Options` internally, so both the `DiscordHostConfiguration` and `CommandServiceConfig` can be configured within the services registration instead of within the `HostBuilder` extensions if it better suits your scenario.
+Do not expect any support to come from me as this is simply a straight upgrade and cleanup of the original Discord.Addons.Hosting
+to add support for the latest API version. Discord.NET seems to have slowed/stopped development so I needed to upgrade to Discord API v9 (as of late).
